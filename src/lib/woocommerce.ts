@@ -1,6 +1,8 @@
 /**
  * WordPress/WooCommerce API Client
- * Calls custom REST endpoints from rentagun-chatbot-api plugin
+ * Supports BOTH:
+ * - Custom Rentagun API (preferred, requires WordPress plugin)
+ * - Standard WooCommerce REST API (fallback, works immediately)
  */
 
 import type {
@@ -11,15 +13,35 @@ import type {
   Order,
 } from '@/types';
 
-// Configuration
-const WORDPRESS_URL = process.env.WOOCOMMERCE_URL || 'https://rentagun.com';
+// Configuration - ensure URL has https:// prefix
+const rawUrl = process.env.WOOCOMMERCE_URL || 'https://rentagun.com';
+const WORDPRESS_URL = rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`;
+
+// Custom Rentagun API credentials
 const API_KEY = process.env.WORDPRESS_API_KEY || '';
 
-// API Base URL
-const API_BASE = `${WORDPRESS_URL}/wp-json/rentagun/v1`;
+// Standard WooCommerce API credentials (fallback)
+const CONSUMER_KEY = process.env.WOOCOMMERCE_CONSUMER_KEY || '';
+const CONSUMER_SECRET = process.env.WOOCOMMERCE_CONSUMER_SECRET || '';
+
+// Determine which API to use
+const USE_CUSTOM_API = !!API_KEY;
+const USE_WOOCOMMERCE_API = !!(CONSUMER_KEY && CONSUMER_SECRET);
+
+// API Base URLs
+const CUSTOM_API_BASE = `${WORDPRESS_URL}/wp-json/rentagun/v1`;
+const WC_API_BASE = `${WORDPRESS_URL}/wp-json/wc/v3`;
+
+// Log config status (not secrets)
+console.log('[Rentagun API] Config:', {
+  url: WORDPRESS_URL,
+  mode: USE_CUSTOM_API ? 'custom-api' : USE_WOOCOMMERCE_API ? 'woocommerce' : 'none',
+  hasApiKey: !!API_KEY,
+  hasWooCredentials: USE_WOOCOMMERCE_API,
+});
 
 /**
- * Custom error for WooCommerce API errors
+ * Custom error for API errors
  */
 export class WooCommerceError extends Error {
   code: string;
@@ -34,53 +56,106 @@ export class WooCommerceError extends Error {
 }
 
 /**
- * Make authenticated request to WordPress API
+ * Make authenticated request to Custom Rentagun API
  */
-async function apiRequest<T>(
+async function customApiRequest<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
-  if (!API_KEY) {
+  const url = `${CUSTOM_API_BASE}${endpoint}`;
+
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      'X-API-Key': API_KEY,
+      ...options.headers,
+    },
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
     throw new WooCommerceError(
-      'WordPress API key not configured',
-      'missing_api_key',
-      500
+      errorData.message || `API request failed: ${response.status}`,
+      errorData.code || 'api_error',
+      response.status
     );
   }
 
-  const url = `${API_BASE}${endpoint}`;
+  return response.json();
+}
 
-  try {
-    const response = await fetch(url, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        'X-API-Key': API_KEY,
-        ...options.headers,
-      },
-    });
+/**
+ * Make authenticated request to Standard WooCommerce API
+ */
+async function wooCommerceApiRequest<T>(
+  endpoint: string,
+  options: RequestInit = {}
+): Promise<T> {
+  const url = new URL(`${WC_API_BASE}${endpoint}`);
+  url.searchParams.set('consumer_key', CONSUMER_KEY);
+  url.searchParams.set('consumer_secret', CONSUMER_SECRET);
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new WooCommerceError(
-        errorData.message || `API request failed: ${response.status}`,
-        errorData.code || 'api_error',
-        response.status
-      );
-    }
+  const response = await fetch(url.toString(), {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
 
-    return response.json();
-  } catch (error) {
-    if (error instanceof WooCommerceError) {
-      throw error;
-    }
-
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
     throw new WooCommerceError(
-      'Failed to connect to WordPress API',
-      'connection_error',
-      503
+      errorData.message || `WooCommerce API request failed: ${response.status}`,
+      errorData.code || 'api_error',
+      response.status
     );
   }
+
+  return response.json();
+}
+
+// WooCommerce product type (standard API response)
+interface WCProduct {
+  id: number;
+  name: string;
+  slug: string;
+  permalink: string;
+  price: string;
+  regular_price: string;
+  description: string;
+  short_description: string;
+  categories: { id: number; name: string; slug: string }[];
+  images: { id: number; src: string; alt: string }[];
+  stock_status: string;
+  meta_data?: { key: string; value: string }[];
+}
+
+/**
+ * Transform WooCommerce product to our Product type
+ */
+function transformWCProduct(wc: WCProduct): Product {
+  const priceNum = parseFloat(wc.price) || parseFloat(wc.regular_price) || 0;
+  // Daily rate is 2% of price as a rough estimate
+  const dailyRate = priceNum > 0 ? Math.round(priceNum * 0.02) : 0;
+
+  return {
+    id: wc.id,
+    name: wc.name,
+    slug: wc.slug,
+    description: wc.description || '',
+    short_description: wc.short_description || '',
+    price: dailyRate.toString(),
+    regular_price: wc.regular_price || wc.price || '0',
+    images: wc.images || [],
+    categories: wc.categories || [],
+    available: wc.stock_status === 'instock',
+    fulfillment_source: 'rag', // Default for WooCommerce products
+    next_available_date: null,
+    resources_available: wc.stock_status === 'instock' ? 1 : 0,
+    meta_data: wc.meta_data || [],
+  };
 }
 
 /**
@@ -107,6 +182,7 @@ export interface ProductListResponse {
 
 /**
  * Get products with optional filters
+ * Uses custom API if available, falls back to WooCommerce API
  */
 export async function getProducts(
   params: ProductSearchParams = {}
@@ -115,24 +191,74 @@ export async function getProducts(
 
   if (params.page) searchParams.set('page', params.page.toString());
   if (params.per_page) searchParams.set('per_page', params.per_page.toString());
-  if (params.category) searchParams.set('category', params.category);
   if (params.search) searchParams.set('search', params.search);
-  if (params.available_only !== undefined) {
-    searchParams.set('available_only', params.available_only.toString());
+
+  if (USE_CUSTOM_API) {
+    // Custom Rentagun API
+    if (params.category) searchParams.set('category', params.category);
+    if (params.available_only !== undefined) {
+      searchParams.set('available_only', params.available_only.toString());
+    }
+
+    const query = searchParams.toString();
+    const endpoint = `/products${query ? `?${query}` : ''}`;
+
+    return customApiRequest<ProductListResponse>(endpoint);
+  } else if (USE_WOOCOMMERCE_API) {
+    // Standard WooCommerce API
+    searchParams.set('status', 'publish');
+    searchParams.set('per_page', (params.per_page || 10).toString());
+
+    const query = searchParams.toString();
+    const endpoint = `/products${query ? `?${query}` : ''}`;
+
+    console.log('[Rentagun API] WooCommerce request:', endpoint);
+    const wcProducts = await wooCommerceApiRequest<WCProduct[]>(endpoint);
+    let products = wcProducts.map(transformWCProduct);
+
+    // Client-side category filter for WooCommerce
+    if (params.category) {
+      const categoryLower = params.category.toLowerCase();
+      products = products.filter(p =>
+        p.categories?.some(c =>
+          c.name.toLowerCase().includes(categoryLower) ||
+          c.slug.toLowerCase().includes(categoryLower)
+        )
+      );
+    }
+
+    return {
+      products,
+      total: products.length,
+      pages: 1,
+      page: params.page || 1,
+      per_page: params.per_page || 10,
+    };
+  } else {
+    throw new WooCommerceError(
+      'No API credentials configured. Set WORDPRESS_API_KEY or WOOCOMMERCE_CONSUMER_KEY/SECRET.',
+      'config_error',
+      500
+    );
   }
-
-  const query = searchParams.toString();
-  const endpoint = `/products${query ? `?${query}` : ''}`;
-
-  return apiRequest<ProductListResponse>(endpoint);
 }
 
 /**
  * Get a single product by ID
  */
 export async function getProduct(productId: number): Promise<Product | null> {
-  const response = await getProducts({ search: productId.toString() });
+  if (USE_WOOCOMMERCE_API && !USE_CUSTOM_API) {
+    // Direct product lookup via WooCommerce
+    try {
+      const wcProduct = await wooCommerceApiRequest<WCProduct>(`/products/${productId}`);
+      return transformWCProduct(wcProduct);
+    } catch {
+      return null;
+    }
+  }
 
+  // Fallback to search
+  const response = await getProducts({ search: productId.toString() });
   return response.products.find((p) => p.id === productId) || null;
 }
 
@@ -151,11 +277,22 @@ export async function searchProducts(query: string): Promise<Product[]> {
 
 /**
  * Check availability for specific dates
+ * Note: Only works with custom API; WooCommerce doesn't have this endpoint
  */
 export async function checkAvailability(
   request: AvailabilityRequest
 ): Promise<AvailabilityResponse> {
-  return apiRequest<AvailabilityResponse>('/availability', {
+  if (!USE_CUSTOM_API) {
+    // Return mock response for WooCommerce mode (assume available)
+    return {
+      available: true,
+      resources_available: 1,
+      fulfillment_source: 'rag',
+      next_available_date: null,
+    };
+  }
+
+  return customApiRequest<AvailabilityResponse>('/availability', {
     method: 'POST',
     body: JSON.stringify(request),
   });
@@ -163,11 +300,20 @@ export async function checkAvailability(
 
 /**
  * Look up order by number and email
+ * Note: Only works with custom API
  */
 export async function lookupOrder(
   request: OrderLookupRequest
 ): Promise<{ order: Order }> {
-  return apiRequest<{ order: Order }>('/orders/lookup', {
+  if (!USE_CUSTOM_API) {
+    throw new WooCommerceError(
+      'Order lookup requires the WordPress plugin to be installed',
+      'plugin_required',
+      501
+    );
+  }
+
+  return customApiRequest<{ order: Order }>('/orders/lookup', {
     method: 'POST',
     body: JSON.stringify(request),
   });
@@ -189,14 +335,16 @@ export const PRODUCT_CATEGORIES = {
  */
 export function formatProductForDisplay(product: Product): string {
   const availability = product.available
-    ? '✓ Available'
+    ? 'Available'
     : product.next_available_date
       ? `Next available: ${product.next_available_date}`
       : 'Currently unavailable';
 
+  const imageUrl = product.images?.[0]?.src || '#';
+
   return `**${product.name}** - $${product.price}/day
 ${availability}
-[View Details](${product.images[0]?.src || '#'})`;
+[View Details](${imageUrl})`;
 }
 
 /**
