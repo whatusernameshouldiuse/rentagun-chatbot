@@ -1,5 +1,22 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Allow images from WooCommerce/WordPress
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'rentagun.com',
+      },
+      {
+        protocol: 'https',
+        hostname: '*.rentagun.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'i0.wp.com',
+      },
+    ],
+  },
   async headers() {
     const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [
       'https://rentagun.com',

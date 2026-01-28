@@ -1,0 +1,928 @@
+/**
+ * Rentagun Chat Widget
+ * Embeddable chat widget for rentagun.com
+ */
+(function() {
+  'use strict';
+
+  // Configuration
+  const CONFIG = {
+    apiUrl: window.RENTAGUN_CHAT_API || 'https://rentagun-chatbot.vercel.app',
+    greeting: 'What are you gearing up for?',
+    placeholder: 'Tell me more...',
+    quickActions: [
+      { text: 'Home defense', message: 'I want something for home defense' },
+      { text: 'Range day', message: 'I want something fun to shoot at the range' },
+      { text: 'Hunting', message: 'I need a gun for hunting' },
+      { text: 'Bucket list gun', message: 'I want to shoot something iconic I\'ve always wanted to try' },
+    ],
+  };
+
+  // State
+  let isOpen = false;
+  let isLoading = false;
+  let messages = [];
+  let sessionId = generateSessionId();
+  let pendingToolData = null;
+  let inactivityTimer = null;
+  let hasTriggeredProactive = false;
+  let hasTriggeredExitIntent = false;
+
+  // DOM Elements
+  let container, bubble, chatWindow, messagesContainer, input, sendButton;
+
+  /**
+   * Initialize the widget
+   */
+  function init() {
+    // Don't initialize twice
+    if (document.querySelector('.rag-widget-container')) return;
+
+    // Load CSS
+    loadStyles();
+
+    // Create widget
+    createWidget();
+
+    // Add event listeners
+    attachEventListeners();
+
+    // Restore conversation from localStorage
+    restoreConversation();
+
+    // Show greeting after a short delay (only if no restored messages)
+    setTimeout(() => {
+      if (messages.length === 0) {
+        addBotMessage(CONFIG.greeting);
+        showQuickActions();
+      }
+    }, 500);
+
+    // Start growth marketing triggers
+    initGrowthTriggers();
+  }
+
+  /**
+   * Load widget styles
+   */
+  function loadStyles() {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = CONFIG.apiUrl + '/widget.css';
+    document.head.appendChild(link);
+  }
+
+  /**
+   * Create widget DOM structure
+   */
+  function createWidget() {
+    container = document.createElement('div');
+    container.className = 'rag-widget-container';
+    container.innerHTML = `
+      <div class="rag-teaser" style="display: none;">Need help finding the right rental?</div>
+      <button class="rag-bubble" aria-label="Open chat">
+        <svg class="rag-bubble-chat" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/>
+        </svg>
+        <svg class="rag-bubble-close" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+        </svg>
+      </button>
+      <div class="rag-chat-window">
+        <div class="rag-header">
+          <div class="rag-header-icon">
+            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/>
+            </svg>
+          </div>
+          <div class="rag-header-text">
+            <h3>Range Guide</h3>
+            <p>Your rental expert</p>
+          </div>
+          <button class="rag-clear-chat" aria-label="Clear chat" title="Clear conversation">
+            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+            </svg>
+          </button>
+        </div>
+        <div class="rag-messages"></div>
+        <div class="rag-input-area">
+          <div class="rag-input-wrapper">
+            <textarea
+              class="rag-input"
+              placeholder="${CONFIG.placeholder}"
+              rows="1"
+            ></textarea>
+          </div>
+          <button class="rag-send" aria-label="Send message">
+            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(container);
+
+    // Get references
+    bubble = container.querySelector('.rag-bubble');
+    chatWindow = container.querySelector('.rag-chat-window');
+    messagesContainer = container.querySelector('.rag-messages');
+    input = container.querySelector('.rag-input');
+    sendButton = container.querySelector('.rag-send');
+  }
+
+  /**
+   * Attach event listeners
+   */
+  function attachEventListeners() {
+    // Toggle chat
+    bubble.addEventListener('click', toggleChat);
+
+    // Clear chat button
+    const clearBtn = container.querySelector('.rag-clear-chat');
+    clearBtn.addEventListener('click', clearConversation);
+
+    // Send message
+    sendButton.addEventListener('click', sendMessage);
+
+    // Enter to send (Shift+Enter for new line)
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    });
+
+    // Auto-resize textarea
+    input.addEventListener('input', () => {
+      input.style.height = 'auto';
+      input.style.height = Math.min(input.scrollHeight, 100) + 'px';
+    });
+
+    // Handle clicks in messages (quick actions, product cards, etc.)
+    messagesContainer.addEventListener('click', (e) => {
+      // Quick actions
+      if (e.target.classList.contains('rag-quick-action')) {
+        const message = e.target.dataset.message;
+        if (message) {
+          input.value = message;
+          sendMessage();
+        }
+      }
+
+      // Book now buttons
+      if (e.target.classList.contains('rag-book-btn')) {
+        const url = e.target.dataset.url;
+        if (url) {
+          window.open(url, '_blank');
+        }
+      }
+
+      // Track link
+      if (e.target.classList.contains('rag-track-link')) {
+        const url = e.target.dataset.url;
+        if (url) {
+          window.open(url, '_blank');
+        }
+      }
+    });
+  }
+
+  /**
+   * Toggle chat window
+   */
+  function toggleChat() {
+    isOpen = !isOpen;
+    bubble.classList.toggle('open', isOpen);
+    chatWindow.classList.toggle('open', isOpen);
+
+    if (isOpen) {
+      input.focus();
+      hideTeaser();
+      resetInactivityTimer();
+    } else {
+      resetInactivityTimer();
+    }
+  }
+
+  /**
+   * Send message to API
+   */
+  async function sendMessage() {
+    const text = input.value.trim();
+    if (!text || isLoading) return;
+
+    // Clear input
+    input.value = '';
+    input.style.height = 'auto';
+
+    // Add user message
+    addUserMessage(text);
+
+    // Add to messages array
+    messages.push({ role: 'user', content: text });
+
+    // Save to localStorage
+    saveConversation();
+
+    // Reset inactivity timer on user interaction
+    resetInactivityTimer();
+
+    // Show typing indicator
+    showTyping();
+    isLoading = true;
+    sendButton.disabled = true;
+
+    try {
+      // Call API with streaming
+      await streamChat(messages);
+    } catch (error) {
+      console.error('Chat error:', error);
+      hideTyping();
+      addErrorMessage('Sorry, I\'m having trouble connecting. Please try again.');
+    } finally {
+      isLoading = false;
+      sendButton.disabled = false;
+    }
+  }
+
+  /**
+   * Stream chat response from API
+   */
+  async function streamChat(messageHistory) {
+    const response = await fetch(CONFIG.apiUrl + '/api/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messages: messageHistory,
+        sessionId: sessionId,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let botMessage = '';
+    let messageElement = null;
+    let currentToolUse = null;
+
+    hideTyping();
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const chunk = decoder.decode(value, { stream: true });
+      const lines = chunk.split('\n');
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(line.slice(6));
+
+            if (data.type === 'text') {
+              botMessage += data.content;
+
+              if (!messageElement) {
+                messageElement = createMessageElement('bot');
+                messagesContainer.appendChild(messageElement);
+              }
+
+              messageElement.innerHTML = formatMessage(botMessage);
+              scrollToBottom();
+            } else if (data.type === 'tool_use') {
+              // Show tool use indicator
+              currentToolUse = data.toolName;
+              showToolIndicator(data.toolName);
+            } else if (data.type === 'products') {
+              // Render product cards
+              hideToolIndicator();
+              renderProductCards(data.products);
+            } else if (data.type === 'availability') {
+              // Render availability result
+              hideToolIndicator();
+              renderAvailabilityCard(data.availability);
+            } else if (data.type === 'order') {
+              // Render order status card
+              hideToolIndicator();
+              renderOrderCard(data.order);
+            } else if (data.type === 'escalation') {
+              // Render escalation/support card
+              hideToolIndicator();
+              renderEscalationCard(data.escalation);
+            } else if (data.type === 'error') {
+              hideToolIndicator();
+              if (messageElement) {
+                messageElement.classList.add('error');
+                messageElement.textContent = data.content;
+              } else {
+                addErrorMessage(data.content);
+              }
+            } else if (data.type === 'done') {
+              hideToolIndicator();
+              if (botMessage) {
+                messages.push({ role: 'assistant', content: botMessage });
+                saveConversation();
+              }
+            }
+          } catch (e) {
+            // Ignore parse errors for incomplete chunks
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Add user message to chat
+   */
+  function addUserMessage(text) {
+    const el = createMessageElement('user');
+    el.textContent = text;
+    messagesContainer.appendChild(el);
+    scrollToBottom();
+  }
+
+  /**
+   * Add bot message to chat
+   */
+  function addBotMessage(text) {
+    const el = createMessageElement('bot');
+    el.innerHTML = formatMessage(text);
+    messagesContainer.appendChild(el);
+    scrollToBottom();
+    messages.push({ role: 'assistant', content: text });
+    saveConversation();
+  }
+
+  /**
+   * Add error message
+   */
+  function addErrorMessage(text) {
+    const el = createMessageElement('bot');
+    el.classList.add('error');
+    el.textContent = text;
+    messagesContainer.appendChild(el);
+    scrollToBottom();
+  }
+
+  /**
+   * Create message element
+   */
+  function createMessageElement(type) {
+    const el = document.createElement('div');
+    el.className = `rag-message ${type}`;
+    return el;
+  }
+
+  /**
+   * Show typing indicator
+   */
+  function showTyping() {
+    const existing = messagesContainer.querySelector('.rag-typing');
+    if (existing) return;
+
+    const el = document.createElement('div');
+    el.className = 'rag-typing';
+    el.innerHTML = '<span></span><span></span><span></span>';
+    messagesContainer.appendChild(el);
+    scrollToBottom();
+  }
+
+  /**
+   * Hide typing indicator
+   */
+  function hideTyping() {
+    const el = messagesContainer.querySelector('.rag-typing');
+    if (el) el.remove();
+  }
+
+  /**
+   * Show tool use indicator
+   */
+  function showToolIndicator(toolName) {
+    hideTyping();
+    hideToolIndicator();
+
+    const toolLabels = {
+      'search_products': 'Searching inventory...',
+      'check_availability': 'Checking availability...',
+      'lookup_order': 'Looking up order...',
+      'request_human_support': 'Connecting you with support...',
+    };
+
+    const el = document.createElement('div');
+    el.className = 'rag-tool-indicator';
+    el.innerHTML = `
+      <div class="rag-tool-spinner"></div>
+      <span>${toolLabels[toolName] || 'Processing...'}</span>
+    `;
+    messagesContainer.appendChild(el);
+    scrollToBottom();
+  }
+
+  /**
+   * Hide tool indicator
+   */
+  function hideToolIndicator() {
+    const el = messagesContainer.querySelector('.rag-tool-indicator');
+    if (el) el.remove();
+  }
+
+  /**
+   * Render product cards
+   */
+  function renderProductCards(products) {
+    if (!products || products.length === 0) return;
+
+    const container = document.createElement('div');
+    container.className = 'rag-product-list';
+
+    products.slice(0, 6).forEach(product => {
+      const card = document.createElement('div');
+      card.className = 'rag-product-card';
+
+      const availabilityClass = product.available ? 'available' : 'unavailable';
+      const availabilityText = product.available
+        ? 'Available'
+        : `Unavailable`;
+
+      // Create tooltip text with categories if available
+      const tooltipParts = [];
+      if (product.categories && product.categories.length > 0) {
+        tooltipParts.push(product.categories.join(', '));
+      }
+      tooltipParts.push(product.available ? 'Ready to rent' : (product.next_available_date ? `Available ${product.next_available_date}` : 'Check availability'));
+      const tooltipText = tooltipParts.join(' • ');
+
+      // Use a placeholder image if none provided
+      const imageUrl = product.image || 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"%3E%3Crect fill="%23f0f0f0" width="100" height="100"/%3E%3Ctext x="50" y="55" font-family="sans-serif" font-size="12" fill="%23999" text-anchor="middle"%3ENo Image%3C/text%3E%3C/svg%3E';
+
+      card.innerHTML = `
+        <div class="rag-product-tooltip">${escapeHtml(tooltipText)}</div>
+        <img src="${imageUrl}" alt="${escapeHtml(product.name)}" loading="lazy">
+        <div class="rag-product-info">
+          <h4>${escapeHtml(product.name)}</h4>
+          <div class="rag-product-meta">
+            <span class="rag-product-price">$${product.daily_rate}/day</span>
+            <span class="rag-product-availability ${availabilityClass}">${availabilityText}</span>
+          </div>
+          ${product.permalink ? `<button class="rag-book-btn" data-url="${escapeHtml(product.permalink)}">View Details</button>` : ''}
+        </div>
+      `;
+
+      // Make whole card clickable to view details
+      card.addEventListener('click', (e) => {
+        if (!e.target.classList.contains('rag-book-btn') && product.permalink) {
+          window.open(product.permalink, '_blank');
+        }
+      });
+
+      container.appendChild(card);
+    });
+
+    if (products.length > 6) {
+      const more = document.createElement('p');
+      more.className = 'rag-more-results';
+      more.textContent = `+ ${products.length - 6} more results. Want me to narrow it down?`;
+      container.appendChild(more);
+    }
+
+    messagesContainer.appendChild(container);
+    scrollToBottom();
+  }
+
+  /**
+   * Render availability card
+   */
+  function renderAvailabilityCard(availability) {
+    const card = document.createElement('div');
+    card.className = 'rag-availability-card';
+
+    const availableClass = availability.available ? 'available' : 'unavailable';
+    const statusText = availability.available
+      ? `Available (${availability.resources_available} in stock)`
+      : availability.conflict_reason || 'Not available for these dates';
+
+    card.innerHTML = `
+      <div class="rag-availability-header">
+        <span class="rag-availability-status ${availableClass}">
+          ${availability.available ? '&#10003;' : '&#10007;'} ${statusText}
+        </span>
+      </div>
+      <div class="rag-availability-dates">
+        <span><strong>Dates:</strong> ${formatDate(availability.start_date)} - ${formatDate(availability.end_date)}</span>
+      </div>
+      ${availability.available && availability.booking_url ?
+        `<a href="${availability.booking_url}" target="_blank" class="rag-book-link">Book These Dates</a>` : ''}
+      ${!availability.available && availability.next_available_date ?
+        `<p class="rag-next-available">Next available: ${formatDate(availability.next_available_date)}</p>` : ''}
+    `;
+
+    messagesContainer.appendChild(card);
+    scrollToBottom();
+  }
+
+  /**
+   * Render order status card
+   */
+  function renderOrderCard(order) {
+    const card = document.createElement('div');
+    card.className = 'rag-order-card';
+
+    const statusClasses = {
+      'pending': 'status-pending',
+      'processing': 'status-processing',
+      'shipped': 'status-shipped',
+      'at-ffl': 'status-ready',
+      'picked-up': 'status-active',
+      'return-shipped': 'status-returning',
+      'completed': 'status-completed',
+      'cancelled': 'status-cancelled',
+    };
+
+    const statusClass = statusClasses[order.status] || '';
+
+    let trackingHtml = '';
+    if (order.tracking) {
+      trackingHtml = `
+        <div class="rag-order-tracking">
+          <strong>Tracking:</strong>
+          <a href="${escapeHtml(order.tracking.tracking_url)}" target="_blank" class="rag-track-link" data-url="${escapeHtml(order.tracking.tracking_url)}">
+            ${order.tracking.carrier.toUpperCase()} ${order.tracking.tracking_number}
+          </a>
+          ${order.tracking.estimated_delivery ? `<span class="rag-est-delivery">Est. ${formatDate(order.tracking.estimated_delivery)}</span>` : ''}
+        </div>
+      `;
+    }
+
+    let fflHtml = '';
+    if (order.ffl_info) {
+      fflHtml = `
+        <div class="rag-order-ffl">
+          <strong>Pickup Location:</strong>
+          <p>${escapeHtml(order.ffl_info.name)}</p>
+          <p>${escapeHtml(order.ffl_info.address)}</p>
+          ${order.ffl_info.phone ? `<p>Phone: ${escapeHtml(order.ffl_info.phone)}</p>` : ''}
+        </div>
+      `;
+    }
+
+    let itemsHtml = order.line_items.map(item =>
+      `<li>${escapeHtml(item.name)}${item.quantity > 1 ? ` (x${item.quantity})` : ''}</li>`
+    ).join('');
+
+    card.innerHTML = `
+      <div class="rag-order-header">
+        <span class="rag-order-number">Order #${escapeHtml(order.order_number)}</span>
+        <span class="rag-order-status ${statusClass}">${escapeHtml(order.status_label)}</span>
+      </div>
+      <div class="rag-order-items">
+        <strong>Items:</strong>
+        <ul>${itemsHtml}</ul>
+      </div>
+      ${order.rental_dates ? `
+        <div class="rag-order-dates">
+          <strong>Rental Period:</strong> ${formatDate(order.rental_dates.start)} - ${formatDate(order.rental_dates.end)}
+        </div>
+      ` : ''}
+      ${trackingHtml}
+      ${fflHtml}
+    `;
+
+    messagesContainer.appendChild(card);
+    scrollToBottom();
+  }
+
+  /**
+   * Render escalation/support card
+   */
+  function renderEscalationCard(escalation) {
+    const card = document.createElement('div');
+    card.className = 'rag-escalation-card';
+
+    card.innerHTML = `
+      <div class="rag-escalation-icon">
+        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z" fill="currentColor"/>
+        </svg>
+      </div>
+      <div class="rag-escalation-content">
+        <h4>Support Request Sent</h4>
+        ${escalation.ticket_id ? `<p class="rag-escalation-ticket">Reference: #${escapeHtml(escalation.ticket_id)}</p>` : ''}
+        <p class="rag-escalation-message">Our team will get back to you soon, typically within a few hours during business hours.</p>
+      </div>
+    `;
+
+    messagesContainer.appendChild(card);
+    scrollToBottom();
+  }
+
+  /**
+   * Show quick actions
+   */
+  function showQuickActions() {
+    const el = document.createElement('div');
+    el.className = 'rag-quick-actions';
+
+    CONFIG.quickActions.forEach((action) => {
+      const btn = document.createElement('button');
+      btn.className = 'rag-quick-action';
+      btn.textContent = action.text;
+      btn.dataset.message = action.message;
+      el.appendChild(btn);
+    });
+
+    messagesContainer.appendChild(el);
+    scrollToBottom();
+  }
+
+  /**
+   * Format message with basic markdown
+   */
+  function formatMessage(text) {
+    // Escape HTML
+    let formatted = escapeHtml(text);
+
+    // Bold
+    formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+
+    // Italic
+    formatted = formatted.replace(/\*(.*?)\*/g, '<em>$1</em>');
+
+    // Links
+    formatted = formatted.replace(
+      /\[([^\]]+)\]\(([^)]+)\)/g,
+      '<a href="$2" target="_blank" rel="noopener">$1</a>'
+    );
+
+    // Line breaks
+    formatted = formatted.replace(/\n/g, '<br>');
+
+    // Bullet lists
+    formatted = formatted.replace(/^- (.+)$/gm, '<li>$1</li>');
+    formatted = formatted.replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
+
+    return formatted;
+  }
+
+  /**
+   * Escape HTML characters
+   */
+  function escapeHtml(text) {
+    if (!text) return '';
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  /**
+   * Format date for display
+   */
+  function formatDate(dateStr) {
+    if (!dateStr) return '';
+    try {
+      const date = new Date(dateStr);
+      return date.toLocaleDateString('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+      });
+    } catch {
+      return dateStr;
+    }
+  }
+
+  /**
+   * Scroll messages to bottom
+   */
+  function scrollToBottom() {
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+  }
+
+  /**
+   * Generate unique session ID
+   */
+  function generateSessionId() {
+    return 'rag_' + Date.now().toString(36) + Math.random().toString(36).substr(2);
+  }
+
+  /**
+   * Save conversation to localStorage
+   */
+  function saveConversation() {
+    try {
+      localStorage.setItem('rag_messages', JSON.stringify(messages));
+      localStorage.setItem('rag_sessionId', sessionId);
+    } catch (e) {
+      console.warn('Failed to save conversation:', e);
+    }
+  }
+
+  /**
+   * Restore conversation from localStorage
+   */
+  function restoreConversation() {
+    try {
+      const savedMessages = localStorage.getItem('rag_messages');
+      const savedSessionId = localStorage.getItem('rag_sessionId');
+
+      if (savedMessages) {
+        messages = JSON.parse(savedMessages);
+
+        // Restore messages to UI
+        messages.forEach(msg => {
+          if (msg.role === 'user') {
+            const el = createMessageElement('user');
+            el.textContent = msg.content;
+            messagesContainer.appendChild(el);
+          } else if (msg.role === 'assistant') {
+            const el = createMessageElement('bot');
+            el.innerHTML = formatMessage(msg.content);
+            messagesContainer.appendChild(el);
+          }
+        });
+
+        scrollToBottom();
+      }
+
+      if (savedSessionId) {
+        sessionId = savedSessionId;
+      }
+    } catch (e) {
+      console.warn('Failed to restore conversation:', e);
+    }
+  }
+
+  /**
+   * Clear conversation
+   */
+  function clearConversation() {
+    if (!confirm('Are you sure you want to clear this conversation?')) {
+      return;
+    }
+
+    // Clear state
+    messages = [];
+    sessionId = generateSessionId();
+    messagesContainer.innerHTML = '';
+
+    // Clear localStorage
+    try {
+      localStorage.removeItem('rag_messages');
+      localStorage.removeItem('rag_sessionId');
+    } catch (e) {
+      console.warn('Failed to clear localStorage:', e);
+    }
+
+    // Reset and show greeting
+    addBotMessage(CONFIG.greeting);
+    showQuickActions();
+
+    // Reset growth triggers
+    hasTriggeredProactive = false;
+    hasTriggeredExitIntent = false;
+    sessionStorage.removeItem('rag_proactive_shown');
+    sessionStorage.removeItem('rag_exit_shown');
+    resetInactivityTimer();
+  }
+
+  /**
+   * Initialize growth marketing triggers
+   */
+  function initGrowthTriggers() {
+    // Check if already triggered in this session
+    if (sessionStorage.getItem('rag_proactive_shown')) {
+      hasTriggeredProactive = true;
+    }
+    if (sessionStorage.getItem('rag_exit_shown')) {
+      hasTriggeredExitIntent = true;
+    }
+
+    // Start inactivity timer
+    resetInactivityTimer();
+
+    // Exit intent detection
+    document.addEventListener('mouseout', handleExitIntent);
+  }
+
+  /**
+   * Reset inactivity timer
+   */
+  function resetInactivityTimer() {
+    if (inactivityTimer) {
+      clearTimeout(inactivityTimer);
+    }
+
+    // Don't trigger if chat is already open or already triggered
+    if (isOpen || hasTriggeredProactive) {
+      return;
+    }
+
+    // Determine timeout based on current page
+    const isProductPage = window.location.pathname.includes('/product/');
+    const timeout = isProductPage ? 20000 : 45000; // 20s for product pages, 45s otherwise
+
+    inactivityTimer = setTimeout(() => {
+      triggerProactiveChat();
+    }, timeout);
+  }
+
+  /**
+   * Trigger proactive chat
+   */
+  function triggerProactiveChat() {
+    if (hasTriggeredProactive || isOpen) return;
+
+    hasTriggeredProactive = true;
+    sessionStorage.setItem('rag_proactive_shown', 'true');
+
+    // Show teaser message
+    showTeaser();
+
+    // Add pulse animation to bubble
+    bubble.classList.add('pulse');
+
+    // Auto-open after showing teaser for 2 seconds
+    setTimeout(() => {
+      if (!isOpen) {
+        toggleChat();
+      }
+    }, 2000);
+  }
+
+  /**
+   * Show teaser message
+   */
+  function showTeaser() {
+    const teaser = container.querySelector('.rag-teaser');
+    if (teaser) {
+      teaser.style.display = 'block';
+      teaser.classList.add('rag-teaser-show');
+    }
+  }
+
+  /**
+   * Hide teaser message
+   */
+  function hideTeaser() {
+    const teaser = container.querySelector('.rag-teaser');
+    if (teaser) {
+      teaser.style.display = 'none';
+      teaser.classList.remove('rag-teaser-show');
+    }
+    bubble.classList.remove('pulse');
+  }
+
+  /**
+   * Handle exit intent
+   */
+  function handleExitIntent(e) {
+    // Only trigger on desktop
+    if (window.innerWidth < 768) return;
+
+    // Check if mouse is leaving the viewport from the top
+    if (e.clientY <= 0 && !hasTriggeredExitIntent && !isOpen) {
+      hasTriggeredExitIntent = true;
+      sessionStorage.setItem('rag_exit_shown', 'true');
+
+      // Open chat with exit message
+      if (!isOpen) {
+        toggleChat();
+      }
+
+      // Add exit intent message after a short delay
+      setTimeout(() => {
+        addBotMessage('Before you go - want me to help you find something?');
+      }, 500);
+    }
+  }
+
+  // Initialize when DOM is ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+
+  // Expose API for programmatic control
+  window.RentagunChat = {
+    open: () => { if (!isOpen) toggleChat(); },
+    close: () => { if (isOpen) toggleChat(); },
+    toggle: toggleChat,
+    sendMessage: (text) => {
+      input.value = text;
+      sendMessage();
+    },
+  };
+})();

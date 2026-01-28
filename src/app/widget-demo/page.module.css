@@ -1,0 +1,395 @@
+/* Widget Demo Page Styles - Rentagun Brand */
+
+.main {
+  min-height: 100vh;
+  background: #0d0d0d;
+  font-family: var(--font-opensans), 'Open Sans', -apple-system, sans-serif;
+}
+
+/* Apply Oswald to headings */
+.heroTitle,
+.sectionTitle,
+.helpTitle,
+.logo,
+.ctaButton,
+.badgeNumber {
+  font-family: var(--font-oswald), 'Oswald', sans-serif;
+}
+
+/* Header */
+.header {
+  background: linear-gradient(90deg, #CC0000 0%, #a00000 100%);
+  padding: 16px 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 2px 20px rgba(0, 0, 0, 0.5);
+}
+
+.headerLeft {
+  display: flex;
+  align-items: center;
+  gap: 48px;
+}
+
+.logo {
+  font-size: 32px;
+  font-weight: 700;
+  color: white;
+  letter-spacing: 3px;
+  text-decoration: none;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.nav {
+  display: flex;
+  gap: 32px;
+}
+
+.navLink {
+  color: rgba(255, 255, 255, 0.9);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  transition: color 0.2s;
+}
+
+.navLink:hover {
+  color: white;
+}
+
+/* Hero Section */
+.hero {
+  background: linear-gradient(180deg, #141414 0%, #1a1a1a 50%, #0d0d0d 100%);
+  padding: 80px 32px 100px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.hero::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(ellipse at center top, rgba(204, 0, 0, 0.15) 0%, transparent 60%);
+  pointer-events: none;
+}
+
+.heroContent {
+  position: relative;
+  z-index: 1;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.heroTitle {
+  font-size: 56px;
+  font-weight: 700;
+  color: white;
+  margin-bottom: 20px;
+  letter-spacing: 2px;
+  line-height: 1.1;
+}
+
+.heroSubtitle {
+  font-size: 20px;
+  color: #888;
+  max-width: 600px;
+  margin: 0 auto 40px;
+  line-height: 1.7;
+}
+
+.ctaButton {
+  background: linear-gradient(135deg, #CC0000 0%, #a00000 100%);
+  color: white;
+  border: none;
+  padding: 18px 48px;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.3s;
+  box-shadow: 0 4px 20px rgba(204, 0, 0, 0.4);
+  text-transform: uppercase;
+}
+
+.ctaButton:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 30px rgba(204, 0, 0, 0.5);
+}
+
+.ctaSubtext {
+  color: #555;
+  font-size: 14px;
+  margin-top: 16px;
+}
+
+/* Trust Badges */
+.trustBadges {
+  display: flex;
+  justify-content: center;
+  gap: 48px;
+  margin-top: 60px;
+  flex-wrap: wrap;
+}
+
+.badge {
+  text-align: center;
+}
+
+.badgeNumber {
+  font-size: 36px;
+  font-weight: 700;
+  color: #CC0000;
+  display: block;
+}
+
+.badgeLabel {
+  font-size: 13px;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* Products Section */
+.productsSection {
+  padding: 80px 32px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.sectionTitle {
+  font-size: 32px;
+  font-weight: 600;
+  color: white;
+  letter-spacing: 2px;
+  margin-bottom: 48px;
+  text-transform: uppercase;
+  position: relative;
+  display: inline-block;
+}
+
+.sectionTitle::after {
+  content: '';
+  position: absolute;
+  bottom: -12px;
+  left: 0;
+  width: 60px;
+  height: 3px;
+  background: #CC0000;
+}
+
+.productGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 28px;
+}
+
+.productCard {
+  background: linear-gradient(180deg, #1a1a1a 0%, #151515 100%);
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid #2a2a2a;
+  transition: all 0.3s;
+}
+
+.productCard:hover {
+  transform: translateY(-8px);
+  border-color: #CC0000;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(204, 0, 0, 0.3);
+}
+
+.productImageWrapper {
+  background: linear-gradient(180deg, #111 0%, #0a0a0a 100%);
+  height: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+}
+
+.productImage {
+  max-width: 85%;
+  max-height: 200px;
+  object-fit: contain;
+  transition: transform 0.3s;
+}
+
+.productCard:hover .productImage {
+  transform: scale(1.05);
+}
+
+.noImage {
+  color: #333;
+  font-size: 14px;
+}
+
+.productInfo {
+  padding: 24px;
+}
+
+.productName {
+  font-size: 16px;
+  font-weight: 600;
+  color: white;
+  line-height: 1.4;
+  margin-bottom: 12px;
+  height: 44px;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.productPrice {
+  color: #CC0000;
+  font-size: 22px;
+  font-weight: 700;
+  margin-bottom: 20px;
+}
+
+.productPrice span {
+  font-size: 14px;
+  font-weight: 400;
+  color: #666;
+}
+
+.viewButton {
+  display: block;
+  width: 100%;
+  background: transparent;
+  color: white;
+  border: 1px solid #444;
+  padding: 14px;
+  border-radius: 6px;
+  text-align: center;
+  text-decoration: none;
+  font-weight: 500;
+  font-size: 14px;
+  letter-spacing: 0.5px;
+  transition: all 0.2s;
+}
+
+.viewButton:hover {
+  background: #CC0000;
+  border-color: #CC0000;
+}
+
+/* Help Section */
+.helpSection {
+  background: linear-gradient(180deg, #151515 0%, #1a1a1a 100%);
+  padding: 80px 32px;
+  text-align: center;
+  border-top: 1px solid #222;
+}
+
+.helpTitle {
+  font-size: 28px;
+  font-weight: 600;
+  color: white;
+  margin-bottom: 20px;
+  letter-spacing: 1px;
+}
+
+.helpText {
+  color: #777;
+  max-width: 550px;
+  margin: 0 auto 32px;
+  line-height: 1.7;
+  font-size: 16px;
+}
+
+.secondaryButton {
+  background: transparent;
+  color: #CC0000;
+  border: 2px solid #CC0000;
+  padding: 16px 40px;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.secondaryButton:hover {
+  background: #CC0000;
+  color: white;
+}
+
+/* Footer */
+.footer {
+  background: #080808;
+  padding: 40px 32px;
+  text-align: center;
+  border-top: 1px solid #1a1a1a;
+}
+
+.footerText {
+  color: #444;
+  font-size: 14px;
+}
+
+/* Loading State */
+.loading {
+  color: #444;
+  text-align: center;
+  padding: 60px;
+  font-size: 16px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .header {
+    padding: 12px 20px;
+  }
+
+  .headerLeft {
+    gap: 24px;
+  }
+
+  .logo {
+    font-size: 24px;
+  }
+
+  .nav {
+    display: none;
+  }
+
+  .hero {
+    padding: 60px 20px 80px;
+  }
+
+  .heroTitle {
+    font-size: 36px;
+  }
+
+  .heroSubtitle {
+    font-size: 16px;
+  }
+
+  .trustBadges {
+    gap: 32px;
+  }
+
+  .badgeNumber {
+    font-size: 28px;
+  }
+
+  .productsSection {
+    padding: 60px 20px;
+  }
+
+  .productGrid {
+    grid-template-columns: 1fr;
+  }
+}
