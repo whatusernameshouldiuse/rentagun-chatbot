@@ -5,15 +5,19 @@ import type { NextRequest } from 'next/server';
 // In production, use Redis or Vercel KV
 const rateLimitMap = new Map<string, { count: number; timestamp: number }>();
 
-const RATE_LIMIT_WINDOW = 60 * 1000; // 1 minute
+// Rate limit windows
+const RATE_LIMIT_WINDOW_CHAT = 60 * 1000; // 1 minute for chat
+const RATE_LIMIT_WINDOW_ORDERS = 10 * 60 * 1000; // 10 minutes for order lookups (security)
+
+// Rate limits per window
 const RATE_LIMIT_CHAT = parseInt(process.env.RATE_LIMIT_CHAT || '20');
 const RATE_LIMIT_ORDERS = parseInt(process.env.RATE_LIMIT_ORDERS || '5');
 
-function getRateLimit(pathname: string): number {
+function getRateLimitConfig(pathname: string): { limit: number; window: number } {
   if (pathname.includes('/api/orders')) {
-    return RATE_LIMIT_ORDERS;
+    return { limit: RATE_LIMIT_ORDERS, window: RATE_LIMIT_WINDOW_ORDERS };
   }
-  return RATE_LIMIT_CHAT;
+  return { limit: RATE_LIMIT_CHAT, window: RATE_LIMIT_WINDOW_CHAT };
 }
 
 function getClientIP(request: NextRequest): string {
@@ -36,12 +40,12 @@ export function middleware(request: NextRequest) {
   const ip = getClientIP(request);
   const key = `${ip}:${request.nextUrl.pathname}`;
   const now = Date.now();
-  const limit = getRateLimit(request.nextUrl.pathname);
+  const { limit, window } = getRateLimitConfig(request.nextUrl.pathname);
 
   // Get or create rate limit entry
   let entry = rateLimitMap.get(key);
 
-  if (!entry || now - entry.timestamp > RATE_LIMIT_WINDOW) {
+  if (!entry || now - entry.timestamp > window) {
     // Reset if window expired
     entry = { count: 1, timestamp: now };
   } else {
@@ -50,9 +54,9 @@ export function middleware(request: NextRequest) {
 
   rateLimitMap.set(key, entry);
 
-  // Clean up old entries periodically
+  // Clean up old entries periodically (use longest window for cleanup)
   if (rateLimitMap.size > 10000) {
-    const cutoff = now - RATE_LIMIT_WINDOW;
+    const cutoff = now - RATE_LIMIT_WINDOW_ORDERS;
     const keysToDelete: string[] = [];
     rateLimitMap.forEach((v, k) => {
       if (v.timestamp < cutoff) {
@@ -64,6 +68,7 @@ export function middleware(request: NextRequest) {
 
   // Check rate limit
   if (entry.count > limit) {
+    const retryAfter = Math.ceil(window / 1000);
     return NextResponse.json(
       {
         error: true,
@@ -73,7 +78,7 @@ export function middleware(request: NextRequest) {
       {
         status: 429,
         headers: {
-          'Retry-After': '60',
+          'Retry-After': retryAfter.toString(),
           'X-RateLimit-Limit': limit.toString(),
           'X-RateLimit-Remaining': '0',
         },

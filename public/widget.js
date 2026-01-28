@@ -5,10 +5,18 @@
 (function () {
   'use strict';
 
-  // Configuration
+  // WordPress/external configuration (set by rentagun-chat-widget.php)
+  const externalConfig = window.RENTAGUN_CHAT_CONFIG || {};
+
+  // Configuration with defaults
   const CONFIG = {
-    apiUrl: window.RENTAGUN_CHAT_API || 'https://rentagun-chatbot.vercel.app',
-    greeting: "Hey there! 👋 I'm the Rentagun concierge. I can help you find the perfect rental, check availability, or track your order. What can I help you with today?",
+    apiUrl: externalConfig.apiUrl || window.RENTAGUN_CHAT_API || 'https://rentagun-chatbot.vercel.app/api/chat',
+    productsUrl: externalConfig.productsUrl || 'https://rentagun-chatbot.vercel.app/api/products',
+    ordersUrl: externalConfig.ordersUrl || 'https://rentagun-chatbot.vercel.app/api/orders',
+    subscribeUrl: externalConfig.subscribeUrl || 'https://rentagun-chatbot.vercel.app/api/subscribe',
+    greeting: externalConfig.greeting || "Hey there! I'm the Rentagun concierge. I can help you find the perfect rental, check availability, or track your order. What can I help you with today?",
+    position: externalConfig.position || 'bottom-right',
+    pageContext: externalConfig.pageContext || null,
     quickActions: [
       { label: 'Browse Firearms', prompt: 'Show me what firearms you have available' },
       { label: 'How It Works', prompt: 'How does renting a firearm work?' },
@@ -69,7 +77,7 @@
 
     // Create container
     container = document.createElement('div');
-    container.className = 'rag-widget';
+    container.className = 'rag-widget' + (CONFIG.position === 'bottom-left' ? ' rag-position-left' : '');
     container.innerHTML = createWidgetHTML();
     document.body.appendChild(container);
 
@@ -387,6 +395,7 @@
       const decoder = new TextDecoder();
       let botMessage = '';
       let messageElement = null;
+      let hasToolResults = false;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -407,8 +416,57 @@
                 messageElement = addBotMessage('');
               }
               botMessage += data.content;
-              messageElement.textContent = botMessage;
+              // Use innerHTML to support markdown-like formatting
+              messageElement.innerHTML = formatMessage(botMessage);
               scrollToBottom();
+            } else if (data.type === 'tool_start') {
+              // Show searching indicator
+              hideTyping();
+              const searchingEl = document.createElement('div');
+              searchingEl.className = 'rag-message rag-message-bot rag-searching';
+              searchingEl.innerHTML = getToolLoadingMessage(data.tool);
+              messagesContainer.appendChild(searchingEl);
+              scrollToBottom();
+            } else if (data.type === 'tool_result') {
+              // Remove searching indicator
+              const searchingEl = messagesContainer.querySelector('.rag-searching');
+              if (searchingEl) searchingEl.remove();
+
+              hasToolResults = true;
+
+              // Handle product search results
+              if (data.tool === 'search_products' && data.data && data.data.products) {
+                const productsHtml = renderProductCards(data.data.products);
+                const resultEl = document.createElement('div');
+                resultEl.className = 'rag-message rag-message-bot rag-products-message';
+                resultEl.innerHTML = productsHtml;
+                messagesContainer.appendChild(resultEl);
+                scrollToBottom();
+
+                // Track product search
+                searchCount++;
+                trackEvent('product_viewed', { count: data.data.products.length });
+              }
+
+              // Handle availability check results
+              if (data.tool === 'check_availability' && data.data) {
+                const availHtml = renderAvailabilityResult(data.data);
+                const resultEl = document.createElement('div');
+                resultEl.className = 'rag-message rag-message-bot';
+                resultEl.innerHTML = availHtml;
+                messagesContainer.appendChild(resultEl);
+                scrollToBottom();
+              }
+
+              // Handle order lookup results
+              if (data.tool === 'lookup_order' && data.data) {
+                const orderHtml = renderOrderResult(data.data);
+                const resultEl = document.createElement('div');
+                resultEl.className = 'rag-message rag-message-bot';
+                resultEl.innerHTML = orderHtml;
+                messagesContainer.appendChild(resultEl);
+                scrollToBottom();
+              }
             } else if (data.type === 'error') {
               hideTyping();
               addBotMessage(data.message || "I'm having trouble right now. Please try again.");
@@ -426,11 +484,8 @@
       }
 
       // Check if we should show email capture
-      if (content.toLowerCase().includes('show') || content.toLowerCase().includes('search')) {
-        searchCount++;
-        if (searchCount >= CONFIG.emailCaptureAfter && !emailCaptured) {
-          setTimeout(() => showEmailCapture(), 2000);
-        }
+      if (searchCount >= CONFIG.emailCaptureAfter && !emailCaptured && hasToolResults) {
+        setTimeout(() => showEmailCapture(), 2000);
       }
 
       // Track event
@@ -443,6 +498,119 @@
     } finally {
       isLoading = false;
     }
+  }
+
+  /**
+   * Get loading message for tool
+   */
+  function getToolLoadingMessage(tool) {
+    const messages = {
+      'search_products': '🔍 Searching our inventory...',
+      'check_availability': '📅 Checking availability...',
+      'lookup_order': '📦 Looking up your order...'
+    };
+    return messages[tool] || '⏳ Working on it...';
+  }
+
+  /**
+   * Format message text (basic markdown support)
+   */
+  function formatMessage(text) {
+    // Bold text **text**
+    text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    // Newlines to <br>
+    text = text.replace(/\n/g, '<br>');
+    return text;
+  }
+
+  /**
+   * Render availability result
+   */
+  function renderAvailabilityResult(data) {
+    const isAvailable = data.available;
+    const productName = data.product_name || 'This firearm';
+    const dates = `${data.start_date} to ${data.end_date}`;
+
+    if (isAvailable) {
+      return `
+        <div class="rag-availability-result rag-available-result">
+          <div class="rag-avail-icon">✅</div>
+          <div class="rag-avail-text">
+            <strong>${escapeHtml(productName)}</strong> is available for ${escapeHtml(dates)}!
+            ${data.booking_url ? `<a href="${escapeHtml(data.booking_url)}" class="rag-book-btn" target="_blank">Book These Dates</a>` : ''}
+          </div>
+        </div>
+      `;
+    } else {
+      return `
+        <div class="rag-availability-result rag-unavailable-result">
+          <div class="rag-avail-icon">❌</div>
+          <div class="rag-avail-text">
+            <strong>${escapeHtml(productName)}</strong> is not available for ${escapeHtml(dates)}.
+            ${data.next_available_date ? `<br>📅 Next available: <strong>${escapeHtml(data.next_available_date)}</strong>` : ''}
+          </div>
+        </div>
+      `;
+    }
+  }
+
+  /**
+   * Render order lookup result
+   */
+  function renderOrderResult(order) {
+    const statusEmojis = {
+      pending: '⏳',
+      processing: '📋',
+      shipped: '📦',
+      'at-ffl': '🏪',
+      'with-customer': '✅',
+      'return-shipped': '↩️',
+      completed: '✅',
+      cancelled: '❌',
+      refunded: '💰'
+    };
+
+    const emoji = statusEmojis[order.status] || '📋';
+    const items = order.line_items ? order.line_items.map(item => item.name).join(', ') : 'N/A';
+
+    let html = `
+      <div class="rag-order-result">
+        <div class="rag-order-header">
+          <span class="rag-order-emoji">${emoji}</span>
+          <strong>Order #${escapeHtml(order.order_number || order.id)}</strong>
+        </div>
+        <div class="rag-order-details">
+          <div class="rag-order-row"><span>Status:</span> <span class="rag-order-status">${escapeHtml(order.status)}</span></div>
+          <div class="rag-order-row"><span>Items:</span> <span>${escapeHtml(items)}</span></div>
+    `;
+
+    if (order.rental_dates) {
+      html += `<div class="rag-order-row"><span>Rental Dates:</span> <span>${escapeHtml(order.rental_dates.start_date)} to ${escapeHtml(order.rental_dates.end_date)}</span></div>`;
+    }
+
+    if (order.shipping && order.shipping.tracking_number) {
+      html += `
+        <div class="rag-order-row">
+          <span>Tracking:</span>
+          <a href="${escapeHtml(order.shipping.tracking_url || '#')}" target="_blank" class="rag-tracking-link">${escapeHtml(order.shipping.tracking_number)}</a>
+        </div>
+      `;
+    }
+
+    if (order.ffl) {
+      html += `
+        <div class="rag-order-ffl">
+          <strong>📍 Pickup Location:</strong><br>
+          ${escapeHtml(order.ffl.name)}<br>
+          ${escapeHtml(order.ffl.address)}<br>
+          ${escapeHtml(order.ffl.city)}, ${escapeHtml(order.ffl.state)} ${escapeHtml(order.ffl.zip)}<br>
+          📞 ${escapeHtml(order.ffl.phone)}
+        </div>
+      `;
+    }
+
+    html += `</div></div>`;
+    return html;
   }
 
   /**
@@ -591,20 +759,18 @@
     }
 
     try {
-      await fetch(`${CONFIG.apiUrl}/api/subscribe`, {
+      // Pass conversation history for interest extraction on server side
+      await fetch(CONFIG.subscribeUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Session-Id': sessionId
+        },
         body: JSON.stringify({
           email,
           sessionId,
           source: 'chatbot',
-          interests: {
-            use_case: null,
-            categories: [],
-            products_viewed: [],
-            price_sensitivity: null,
-            urgency: null
-          }
+          conversationHistory: messages
         })
       });
 
