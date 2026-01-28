@@ -1,0 +1,631 @@
+/* Rentagun Chat Widget Styles */
+
+/* CSS Reset for widget container */
+.rag-widget * {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+}
+
+/* Chat Bubble Button */
+.rag-bubble {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #c41e3a 0%, #8b0000 100%);
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(196, 30, 58, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s, box-shadow 0.2s;
+  z-index: 9999;
+}
+
+.rag-bubble:hover {
+  transform: scale(1.05);
+  box-shadow: 0 6px 16px rgba(196, 30, 58, 0.5);
+}
+
+.rag-bubble.pulse {
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 4px 12px rgba(196, 30, 58, 0.4);
+  }
+  50% {
+    box-shadow: 0 4px 20px rgba(196, 30, 58, 0.7);
+  }
+  100% {
+    box-shadow: 0 4px 12px rgba(196, 30, 58, 0.4);
+  }
+}
+
+.rag-bubble svg {
+  width: 28px;
+  height: 28px;
+  fill: white;
+}
+
+/* Teaser Message */
+.rag-teaser {
+  position: fixed;
+  bottom: 90px;
+  right: 20px;
+  background: white;
+  padding: 12px 16px;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  max-width: 260px;
+  display: none;
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 0.3s, transform 0.3s;
+  z-index: 9998;
+}
+
+.rag-teaser-show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.rag-teaser-close {
+  position: absolute;
+  top: 4px;
+  right: 8px;
+  background: none;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  color: #999;
+}
+
+.rag-teaser-text {
+  font-size: 14px;
+  color: #333;
+  line-height: 1.4;
+}
+
+/* Chat Container */
+.rag-container {
+  position: fixed;
+  bottom: 90px;
+  right: 20px;
+  width: 380px;
+  height: 520px;
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 9999;
+}
+
+.rag-container.rag-open {
+  display: flex;
+  animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Chat Header */
+.rag-header {
+  background: linear-gradient(135deg, #c41e3a 0%, #8b0000 100%);
+  color: white;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.rag-header-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.rag-header-avatar {
+  width: 40px;
+  height: 40px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rag-header-avatar svg {
+  width: 24px;
+  height: 24px;
+  fill: white;
+}
+
+.rag-header-title {
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.rag-header-subtitle {
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+.rag-header-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.rag-header-btn {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  border-radius: 8px;
+  padding: 8px;
+  cursor: pointer;
+  color: white;
+  transition: background 0.2s;
+}
+
+.rag-header-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.rag-header-btn svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+
+/* Messages Area */
+.rag-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.rag-message {
+  max-width: 85%;
+  padding: 12px 16px;
+  border-radius: 16px;
+  font-size: 14px;
+  line-height: 1.5;
+  word-wrap: break-word;
+}
+
+.rag-message-user {
+  align-self: flex-end;
+  background: linear-gradient(135deg, #c41e3a 0%, #8b0000 100%);
+  color: white;
+  border-bottom-right-radius: 4px;
+}
+
+.rag-message-bot {
+  align-self: flex-start;
+  background: #f0f0f0;
+  color: #333;
+  border-bottom-left-radius: 4px;
+}
+
+.rag-message-bot a {
+  color: #c41e3a;
+  text-decoration: none;
+}
+
+.rag-message-bot a:hover {
+  text-decoration: underline;
+}
+
+/* Typing Indicator */
+.rag-typing {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 16px;
+  background: #f0f0f0;
+  border-radius: 16px;
+  border-bottom-left-radius: 4px;
+  align-self: flex-start;
+  max-width: 60px;
+}
+
+.rag-typing-dot {
+  width: 8px;
+  height: 8px;
+  background: #999;
+  border-radius: 50%;
+  animation: typing 1.4s infinite;
+}
+
+.rag-typing-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.rag-typing-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes typing {
+  0%, 60%, 100% {
+    transform: translateY(0);
+  }
+  30% {
+    transform: translateY(-4px);
+  }
+}
+
+/* Quick Actions */
+.rag-quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 16px 12px;
+}
+
+.rag-quick-btn {
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 20px;
+  padding: 8px 16px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: #333;
+}
+
+.rag-quick-btn:hover {
+  border-color: #c41e3a;
+  color: #c41e3a;
+  background: #fff5f7;
+}
+
+/* Input Area */
+.rag-input-area {
+  padding: 12px 16px;
+  border-top: 1px solid #eee;
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.rag-input {
+  flex: 1;
+  border: 1px solid #ddd;
+  border-radius: 24px;
+  padding: 12px 16px;
+  font-size: 14px;
+  outline: none;
+  resize: none;
+  max-height: 120px;
+  font-family: inherit;
+}
+
+.rag-input:focus {
+  border-color: #c41e3a;
+}
+
+.rag-input::placeholder {
+  color: #999;
+}
+
+.rag-send-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #c41e3a 0%, #8b0000 100%);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s;
+}
+
+.rag-send-btn:hover:not(:disabled) {
+  transform: scale(1.05);
+}
+
+.rag-send-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.rag-send-btn svg {
+  width: 20px;
+  height: 20px;
+  fill: white;
+}
+
+/* Product Cards */
+.rag-products {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.rag-product-card {
+  background: white;
+  border: 1px solid #eee;
+  border-radius: 12px;
+  padding: 12px;
+  display: flex;
+  gap: 12px;
+}
+
+.rag-product-image {
+  width: 60px;
+  height: 60px;
+  border-radius: 8px;
+  object-fit: cover;
+  background: #f5f5f5;
+}
+
+.rag-product-info {
+  flex: 1;
+}
+
+.rag-product-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: #333;
+  margin-bottom: 4px;
+}
+
+.rag-product-price {
+  font-size: 13px;
+  color: #666;
+}
+
+.rag-product-availability {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.rag-availability-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.rag-available .rag-availability-dot {
+  background: #22c55e;
+}
+
+.rag-available {
+  color: #22c55e;
+}
+
+.rag-unavailable .rag-availability-dot {
+  background: #ef4444;
+}
+
+.rag-unavailable {
+  color: #ef4444;
+}
+
+.rag-product-btn {
+  padding: 6px 12px;
+  background: #c41e3a;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  margin-top: 8px;
+}
+
+.rag-product-btn:hover {
+  background: #a01830;
+}
+
+/* Popular badge */
+.rag-popular-badge {
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-left: 8px;
+  font-weight: 600;
+}
+
+/* Urgency text */
+.rag-urgency-text {
+  color: #c41e3a;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+/* Order Status Card */
+.rag-order-card {
+  background: white;
+  border: 1px solid #eee;
+  border-radius: 12px;
+  padding: 16px;
+  margin-top: 8px;
+}
+
+.rag-order-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.rag-order-number {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.rag-order-status {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.rag-status-processing {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.rag-status-shipped {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.rag-status-delivered {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.rag-order-detail {
+  font-size: 13px;
+  color: #666;
+  margin: 4px 0;
+}
+
+.rag-tracking-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #c41e3a;
+  font-size: 13px;
+  margin-top: 8px;
+}
+
+/* Mobile Styles */
+@media (max-width: 768px) {
+  .rag-container {
+    bottom: 0;
+    right: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: 0;
+  }
+
+  .rag-bubble {
+    bottom: 16px;
+    right: 16px;
+  }
+
+  .rag-teaser {
+    bottom: 86px;
+    right: 16px;
+    left: 16px;
+    max-width: none;
+  }
+
+  .rag-header {
+    padding: 16px;
+    padding-top: calc(16px + env(safe-area-inset-top));
+  }
+
+  .rag-input-area {
+    padding-bottom: calc(12px + env(safe-area-inset-bottom));
+  }
+}
+
+/* Email Capture Modal */
+.rag-email-modal {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 10;
+}
+
+.rag-email-modal.rag-show {
+  display: flex;
+}
+
+.rag-email-content {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  max-width: 320px;
+  width: 100%;
+  text-align: center;
+}
+
+.rag-email-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: #333;
+}
+
+.rag-email-subtitle {
+  font-size: 14px;
+  color: #666;
+  margin-bottom: 16px;
+}
+
+.rag-email-input {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 14px;
+  margin-bottom: 12px;
+}
+
+.rag-email-input:focus {
+  outline: none;
+  border-color: #c41e3a;
+}
+
+.rag-email-submit {
+  width: 100%;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, #c41e3a 0%, #8b0000 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.rag-email-submit:hover {
+  opacity: 0.9;
+}
+
+.rag-email-skip {
+  background: none;
+  border: none;
+  color: #666;
+  font-size: 13px;
+  cursor: pointer;
+  margin-top: 12px;
+}
+
+.rag-email-skip:hover {
+  color: #333;
+}
