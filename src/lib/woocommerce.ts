@@ -134,11 +134,11 @@ interface WCProduct {
 
 /**
  * Transform WooCommerce product to our Product type
+ * Note: WooCommerce 'price' field IS the daily rental rate, not MSRP
  */
 function transformWCProduct(wc: WCProduct): Product {
-  const priceNum = parseFloat(wc.price) || parseFloat(wc.regular_price) || 0;
-  // Daily rate is 2% of price as a rough estimate
-  const dailyRate = priceNum > 0 ? Math.round(priceNum * 0.02) : 0;
+  // The price field in WooCommerce is already the daily rental rate
+  const dailyRate = wc.price || wc.regular_price || '0';
 
   return {
     id: wc.id,
@@ -146,7 +146,7 @@ function transformWCProduct(wc: WCProduct): Product {
     slug: wc.slug,
     description: wc.description || '',
     short_description: wc.short_description || '',
-    price: dailyRate.toString(),
+    price: dailyRate,
     regular_price: wc.regular_price || wc.price || '0',
     images: wc.images || [],
     categories: wc.categories || [],
